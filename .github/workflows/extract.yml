@@ -1,0 +1,58 @@
+name: Extract Project ZIP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract ZIP
+        run: |
+          python3 - <<'PY'
+          import zipfile, os
+          from pathlib import Path
+
+          z = zipfile.ZipFile("jonotar-kontho-image-share.zip")
+          names = [n for n in z.namelist() if n.strip("/")]
+          roots = {n.split("/")[0] for n in names}
+
+          for n in names:
+              p = Path(n)
+              if p.is_absolute() or ".." in p.parts:
+                  continue
+
+              parts = p.parts
+              if len(roots) == 1 and len(parts) > 1:
+                  parts = parts[1:]
+
+              if not parts:
+                  continue
+
+              if any(x == "node_modules" or x == ".next" for x in parts):
+                  continue
+
+              if any(x.startswith(".env") for x in parts):
+                  continue
+
+              dest = Path(*parts)
+              if n.endswith("/"):
+                  dest.mkdir(parents=True, exist_ok=True)
+              else:
+                  dest.parent.mkdir(parents=True, exist_ok=True)
+                  dest.write_bytes(z.read(n))
+          PY
+
+      - name: Save extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Extract project ZIP" || echo "No changes"
+          git push
